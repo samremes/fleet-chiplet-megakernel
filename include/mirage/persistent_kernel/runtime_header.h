@@ -187,6 +187,10 @@ enum TaskType {
   TASK_GANG_FULL_LAYER_FUSED_MI300 = 216,
   TASK_GANG_FULL_LAYER_WITH_LMHEAD_FUSED_MI300 = 217,
   TASK_GANG_RMSNORM_LINEAR_MXFP4_BIAS_ARGMAX_MI300 = 218,
+  // Minimal tutorial tasks (demo/fleet_toy).
+  TASK_FLEET_TOY_RMS_ROW = 219,
+  TASK_GANG_FLEET_TOY_LINEAR = 220,
+  TASK_FLEET_TOY_ADD_ROW = 221,
   // Hopper Tasks
   TASK_HOPPER_TASK_BEGIN = 150, // Hopper start placeholder, not a real task
   TASK_LINEAR_WITH_RESIDUAL_HOPPER = 151,
@@ -423,6 +427,9 @@ struct RuntimeConfig {
                                // writing xcd_map
   int *xcd_event_num_tasks; // [num_xcds * num_events] — per-XCD per-event task
                             // count (set by scheduler)
+  // Optional host-mapped decode progress. It remains null for non-serving
+  // examples and must exist independently of precomputed dispatch.
+  int *progress_host;
   // Combined kernel: dynamic role election — one scheduler per XCD
   int *xcd_scheduler_claimed;     // [num_xcds] — atomicCAS to claim XCD as
                                   // scheduler (-1 = unclaimed)
@@ -447,14 +454,6 @@ struct RuntimeConfig {
   // so breadcrumbs survive the abort that a memory fault triggers. Null
   // unless built with MPK_NIL_TRIPWIRE. See persistent_kernel.cuh.
   unsigned long long *tripwire;
-  // Decode progress, published to *pinned host* memory once per iteration by
-  // the scheduler. The megakernel runs a whole request inside one blocking
-  // launch, so device memory tells the host nothing until that launch returns
-  // -- which is too late for a server that has to stream tokens as they are
-  // produced. Writes here land in host RAM over PCIe as they happen, the same
-  // property the nil tripwire relies on. Null unless the host allocated it.
-  //   [r] = token position reached by batch slot r (reset per launch)
-  int *progress_host;
   // Cross-XCD gang barrier: workers sync before executing gang tasks with
   // internal barriers
   unsigned long long

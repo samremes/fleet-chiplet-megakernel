@@ -30,6 +30,12 @@ public:
   static TaskRegister *get_instance();
   int register_embedding_task(threadblock::Graph const &bgraph,
                               std::vector<int> const &params);
+  int register_fleet_toy_rms_row_task(
+      threadblock::Graph const &bgraph, std::vector<int> const &params);
+  int register_gang_fleet_toy_linear_task(
+      threadblock::Graph const &bgraph, std::vector<int> const &params);
+  int register_fleet_toy_add_row_task(
+      threadblock::Graph const &bgraph, std::vector<int> const &params);
   int register_rmsnorm_task(threadblock::Graph const &bgraph,
                             std::vector<int> const &params);
   int register_rmsnorm_linear_task(threadblock::Graph const &bgraph,

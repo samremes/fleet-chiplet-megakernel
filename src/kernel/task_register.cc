@@ -6455,5 +6455,51 @@ int TaskRegister::register_paged_attention_split_kv_hopper_task(
                                code.to_string());
 }
 
+int TaskRegister::register_fleet_toy_rms_row_task(
+    threadblock::Graph const &bgraph, std::vector<int> const &params) {
+  assert(params.size() == 1);
+  assert(bgraph.operators.size() == 3);
+  mirage::transpiler::CodeKeeper code;
+  code.inc_indent();
+  code.e("kernel::fleet_toy_rms_row<$>(", params[0]);
+  code.e("    task_desc->input_ptrs[0],");
+  code.e("    task_desc->input_ptrs[1],");
+  code.e("    task_desc->output_ptrs[0],");
+  code.e("    1.0e-6f);");
+  return register_task_variant(TASK_FLEET_TOY_RMS_ROW, code.to_string());
+}
+
+int TaskRegister::register_gang_fleet_toy_linear_task(
+    threadblock::Graph const &bgraph, std::vector<int> const &params) {
+  // [M, K, N_PER_XCD, output_stride, tiles_per_xcd]
+  assert(params.size() == 5);
+  assert(bgraph.operators.size() == 3);
+  mirage::transpiler::CodeKeeper code;
+  code.inc_indent();
+  code.e("kernel::fleet_toy_gang_linear<$, $, $>(",
+         params[0],
+         params[1],
+         params[2]);
+  code.e("    task_desc->input_ptrs[0],");
+  code.e("    task_desc->input_ptrs[1],");
+  code.e("    task_desc->output_ptrs[0],");
+  code.e("    $,", params[3]);
+  code.e("    tile_idx);");
+  return register_task_variant(TASK_GANG_FLEET_TOY_LINEAR, code.to_string());
+}
+
+int TaskRegister::register_fleet_toy_add_row_task(
+    threadblock::Graph const &bgraph, std::vector<int> const &params) {
+  assert(params.size() == 1);
+  assert(bgraph.operators.size() == 3);
+  mirage::transpiler::CodeKeeper code;
+  code.inc_indent();
+  code.e("kernel::fleet_toy_add_row<$>(", params[0]);
+  code.e("    task_desc->input_ptrs[0],");
+  code.e("    task_desc->input_ptrs[1],");
+  code.e("    task_desc->output_ptrs[0]);");
+  return register_task_variant(TASK_FLEET_TOY_ADD_ROW, code.to_string());
+}
+
 } // namespace runtime
 } // namespace mirage

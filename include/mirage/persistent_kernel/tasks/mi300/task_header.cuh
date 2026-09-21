@@ -69,6 +69,7 @@
 #include "tasks/mi300/moe_residual_add_f32_mi300.cuh"
 #include "tasks/mi300/swigluoai_mi300.cuh"
 #include "tasks/mi300/bias_add_mi300.cuh"
+#include "tasks/mi300/fleet_toy.cuh"
 // clang-format on
 // Merge kernel moved above gang_full_layer_fused_mi300.cuh (needs it at
 // template definition time)

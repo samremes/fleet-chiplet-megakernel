@@ -696,7 +696,8 @@ __device__ __forceinline__ void
 
 // Helper: check if a task type is a gang task
 __device__ __host__ __forceinline__ bool is_gang_task_type(TaskType t) {
-  return t == TASK_GANG_LINEAR_MI300 || t == TASK_GANG_LINEAR_RES_MI300 ||
+  return t == TASK_GANG_FLEET_TOY_LINEAR ||
+         t == TASK_GANG_LINEAR_MI300 || t == TASK_GANG_LINEAR_RES_MI300 ||
          t == TASK_GANG_LINEAR_SILU_MI300 || t == TASK_GANG_RMS_NORM_MI300 ||
          t == TASK_GANG_SPLITK_LINEAR_RES_MI300 ||
          t == TASK_GANG_KSPLIT_GEMM_MI300 ||
@@ -4223,6 +4224,9 @@ static void _init_persistent_kernel(std::vector<FullTaskDesc> &all_tasks,
                                     int my_gpu_id);
 
 static RuntimeConfig global_runtime_config;
+// Present for both dynamic and precomputed dispatch. Dynamic dispatch leaves
+// it null; shared progress helpers still compile and become no-ops.
+static int *g_progress_host = nullptr;
 #ifdef MPK_PRECOMPUTED_DISPATCH
 static unsigned long long *g_dbg_h_iter_ready = nullptr;
 static int *g_dbg_h_terminate = nullptr;
@@ -4231,8 +4235,6 @@ static unsigned long long *g_dbg_h_tasks_done =
 static int *g_dbg_h_worker_state =
     nullptr; // [num_workers*4] host-mapped debug state
 static int g_dbg_num_workers = 0;
-// Host-side view of the decode-progress counter (pinned, device-mapped).
-static int *g_progress_host = nullptr;
 static EventCounter *g_dbg_h_event_counters =
     nullptr; // host-mapped event counters
 static EventCounter *g_dbg_h_xcd_local_counters =
@@ -5587,6 +5589,15 @@ extern "C" void init_persistent_kernel(std::vector<void *> meta_tensors,
 // TODO: change launch config
 extern "C" void launch_persistent_kernel(cudaStream_t default_stream) {
   fprintf(stderr, "[HOST_DBG] launch_persistent_kernel ENTER\n");
+#if (defined(__HIP_PLATFORM_AMD__) || defined(MIRAGE_AMD_MI300)) &&            \
+    !defined(MPK_PRECOMPUTED_DISPATCH)
+  // Dynamic-mode initialization currently leaves hipErrorInvalidValue
+  // uncleared. Accept only that known status before checking every launch.
+  hipError_t init_status = hipGetLastError();
+  if (init_status != hipSuccess && init_status != hipErrorInvalidValue) {
+    CUDA_CHECK(init_status);
+  }
+#endif
   // Progress is per-launch, so clear it before the kernel starts rather than
   // after it ends: a streaming reader polling from another thread must never
   // see the previous request's count and emit tokens that do not exist yet.
@@ -5603,8 +5614,13 @@ extern "C" void launch_persistent_kernel(cudaStream_t default_stream) {
                      0 /*smem*/,
                      default_stream>>>(global_runtime_config,
                                        end_of_task_graph_event_pos);
-    (void)cudaEventRecord(global_runtime_config.prepare_done_event,
-                          default_stream);
+#if defined(__HIP_PLATFORM_AMD__) || defined(MIRAGE_AMD_MI300)
+    CUDA_CHECK(hipGetLastError());
+#else
+    CUDA_CHECK(cudaGetLastError());
+#endif
+    CUDA_CHECK(cudaEventRecord(global_runtime_config.prepare_done_event,
+                               default_stream));
 #ifdef USE_NVSHMEM
     nvshmem_barrier_all();
 #endif
@@ -5612,12 +5628,12 @@ extern "C" void launch_persistent_kernel(cudaStream_t default_stream) {
   int num_schedulers = global_runtime_config.num_local_schedulers +
                        global_runtime_config.num_remote_schedulers;
   if (global_runtime_config.split_worker_scheduler) {
-    (void)cudaStreamWaitEvent(global_runtime_config.worker_stream,
-                              global_runtime_config.prepare_done_event,
-                              0);
-    (void)cudaStreamWaitEvent(global_runtime_config.scheduler_stream,
-                              global_runtime_config.prepare_done_event,
-                              0);
+    CUDA_CHECK(cudaStreamWaitEvent(global_runtime_config.worker_stream,
+                                   global_runtime_config.prepare_done_event,
+                                   0));
+    CUDA_CHECK(cudaStreamWaitEvent(global_runtime_config.scheduler_stream,
+                                   global_runtime_config.prepare_done_event,
+                                   0));
 
     // The split kernel does not support NVSHMEM because
     // nvshmemx_collective_launch launches kernels sequentially, which blocks
@@ -5627,21 +5643,31 @@ extern "C" void launch_persistent_kernel(cudaStream_t default_stream) {
                     MAX_DYNAMIC_SHARED_MEMORY_SIZE /*smem*/,
                     global_runtime_config.worker_stream>>>(
         global_runtime_config);
+#if defined(__HIP_PLATFORM_AMD__) || defined(MIRAGE_AMD_MI300)
+    CUDA_CHECK(hipGetLastError());
+#else
+    CUDA_CHECK(cudaGetLastError());
+#endif
     scheduler_kernel<<<dim3(global_runtime_config.num_local_schedulers, 1, 1),
                        dim3(128, 1, 1),
                        0 /*smem*/,
                        global_runtime_config.scheduler_stream>>>(
         global_runtime_config);
+#if defined(__HIP_PLATFORM_AMD__) || defined(MIRAGE_AMD_MI300)
+    CUDA_CHECK(hipGetLastError());
+#else
+    CUDA_CHECK(cudaGetLastError());
+#endif
 
-    (void)cudaEventRecord(global_runtime_config.worker_done_event,
-                          global_runtime_config.worker_stream);
-    (void)cudaEventRecord(global_runtime_config.scheduler_done_event,
-                          global_runtime_config.scheduler_stream);
+    CUDA_CHECK(cudaEventRecord(global_runtime_config.worker_done_event,
+                               global_runtime_config.worker_stream));
+    CUDA_CHECK(cudaEventRecord(global_runtime_config.scheduler_done_event,
+                               global_runtime_config.scheduler_stream));
 
-    (void)cudaStreamWaitEvent(
-        default_stream, global_runtime_config.worker_done_event, 0);
-    (void)cudaStreamWaitEvent(
-        default_stream, global_runtime_config.scheduler_done_event, 0);
+    CUDA_CHECK(cudaStreamWaitEvent(
+        default_stream, global_runtime_config.worker_done_event, 0));
+    CUDA_CHECK(cudaStreamWaitEvent(
+        default_stream, global_runtime_config.scheduler_done_event, 0));
 
 #ifdef MPK_PRECOMPUTED_DISPATCH
     // Hang-diagnosis watchdog. OFF unless MPK_HOST_WATCHDOG=1.
@@ -6425,8 +6451,8 @@ extern "C" void launch_persistent_kernel(cudaStream_t default_stream) {
       // path only runs under MPK_WORKER_STATE debug builds.
     }
 #endif
-    (void)cudaStreamSynchronize(global_runtime_config.worker_stream);
-    (void)cudaStreamSynchronize(global_runtime_config.scheduler_stream);
+    CUDA_CHECK(cudaStreamSynchronize(global_runtime_config.worker_stream));
+    CUDA_CHECK(cudaStreamSynchronize(global_runtime_config.scheduler_stream));
   } else {
     int num_sms_to_use = global_runtime_config.num_workers + num_schedulers;
 #ifdef USE_NVSHMEM

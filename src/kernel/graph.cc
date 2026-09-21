@@ -442,7 +442,23 @@ void Graph::register_task(char const *task_type, std::vector<int> params) {
   assert(op->op_type == type::KN_CUSTOMIZED_OP);
   KNCustomizedOp const *customized = static_cast<KNCustomizedOp const *>(op);
   TaskRegister *task_register = TaskRegister::get_instance();
-  if (name == "embedding") {
+  if (name == "fleet_toy_rms_row") {
+    int variant_id = task_register->register_fleet_toy_rms_row_task(
+        customized->bgraph, params);
+    task_config[op] =
+        std::make_tuple(2, 1, TASK_FLEET_TOY_RMS_ROW, variant_id);
+  } else if (name == "gang_fleet_toy_linear") {
+    int variant_id = task_register->register_gang_fleet_toy_linear_task(
+        customized->bgraph, params);
+    task_config[op] =
+        std::make_tuple(2, 1, TASK_GANG_FLEET_TOY_LINEAR, variant_id);
+    gang_task_tiles_per_xcd[op] = params[4];
+  } else if (name == "fleet_toy_add_row") {
+    int variant_id = task_register->register_fleet_toy_add_row_task(
+        customized->bgraph, params);
+    task_config[op] =
+        std::make_tuple(2, 1, TASK_FLEET_TOY_ADD_ROW, variant_id);
+  } else if (name == "embedding") {
     int variant_id =
         task_register->register_embedding_task(customized->bgraph, params);
     task_config[op] = std::make_tuple(2, 1, TASK_EMBEDDING, variant_id);

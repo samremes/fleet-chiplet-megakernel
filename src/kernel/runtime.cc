@@ -413,7 +413,8 @@ void register_mugraph(
                 (int)((bid.y << 16) | (bid.x & 0xFFFF));
           }
           // Set gang task metadata: n_tile_count = tiles per XCD
-          if (task_type == TASK_GANG_LINEAR_MI300 ||
+          if (task_type == TASK_GANG_FLEET_TOY_LINEAR ||
+              task_type == TASK_GANG_LINEAR_MI300 ||
               task_type == TASK_GANG_LINEAR_RES_MI300 ||
               task_type == TASK_GANG_LINEAR_SILU_MI300 ||
               task_type == TASK_GANG_RMS_NORM_MI300 ||
@@ -1496,6 +1497,10 @@ TaskGraphResult print_task_graph(
 
   // Generate task implementation
   std::map<TaskType, std::string> task_type_to_name;
+  task_type_to_name[TASK_FLEET_TOY_RMS_ROW] = "TASK_FLEET_TOY_RMS_ROW";
+  task_type_to_name[TASK_GANG_FLEET_TOY_LINEAR] =
+      "TASK_GANG_FLEET_TOY_LINEAR";
+  task_type_to_name[TASK_FLEET_TOY_ADD_ROW] = "TASK_FLEET_TOY_ADD_ROW";
   task_type_to_name[TASK_EMBEDDING] = "TASK_EMBEDDING";
   task_type_to_name[TASK_RMS_NORM] = "TASK_RMS_NORM";
   task_type_to_name[TASK_RMS_NORM_LINEAR] = "TASK_RMS_NORM_LINEAR";
@@ -1654,7 +1659,8 @@ TaskGraphResult print_task_graph(
   bool first_task = true;
   for (auto const &task : task_register->all_task_variants) {
     // Skip gang tasks — they use _execute_gang_task with tile_idx parameter
-    if (task.first == TASK_GANG_LINEAR_MI300 ||
+    if (task.first == TASK_GANG_FLEET_TOY_LINEAR ||
+        task.first == TASK_GANG_LINEAR_MI300 ||
         task.first == TASK_GANG_LINEAR_RES_MI300 ||
         task.first == TASK_GANG_LINEAR_SILU_MI300 ||
         task.first == TASK_GANG_RMS_NORM_MI300 ||
@@ -1714,7 +1720,8 @@ TaskGraphResult print_task_graph(
   {
     bool first_gang = true;
     for (auto const &task : task_register->all_task_variants) {
-      if (task.first != TASK_GANG_LINEAR_MI300 &&
+      if (task.first != TASK_GANG_FLEET_TOY_LINEAR &&
+          task.first != TASK_GANG_LINEAR_MI300 &&
           task.first != TASK_GANG_LINEAR_RES_MI300 &&
           task.first != TASK_GANG_LINEAR_SILU_MI300 &&
           task.first != TASK_GANG_RMS_NORM_MI300 &&

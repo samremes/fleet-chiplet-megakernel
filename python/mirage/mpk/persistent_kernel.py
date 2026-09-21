@@ -3800,6 +3800,68 @@ class PersistentKernel:
             [output_stride, tile_n, n_tiles_per_xcd, k_splits]
         )
 
+    def fleet_toy_rms_row_layer(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        output: DTensor,
+        rows: int,
+        hidden_dim: int,
+        block_dim: tuple = (256, 1, 1),
+    ):
+        """Tutorial RMSNorm: one ordinary Fleet task per row."""
+        tb_graph = TBGraph(CyTBGraph((rows, 1, 1), block_dim, 1, 64))
+        tb_graph.new_input(input, (0, -1, -1), -1, True)
+        tb_graph.new_input(weight, (-1, -1, -1), -1, True)
+        tb_graph.new_input(output, (0, -1, -1), -1, True)
+        self.kn_graph.customized([input, weight, output], tb_graph)
+        self.kn_graph.register_task(
+            tb_graph, "fleet_toy_rms_row", [hidden_dim]
+        )
+
+    def gang_fleet_toy_linear_layer(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        output: DTensor,
+        rows: int,
+        reduction_dim: int,
+        output_dim: int,
+        block_dim: tuple = (256, 1, 1),
+    ):
+        """Tutorial gang task: one descriptor per XCD, one tile per row."""
+        assert output_dim % 8 == 0
+        output_per_xcd = output_dim // 8
+        tb_graph = TBGraph(CyTBGraph((8, 1, 1), block_dim, 1, 64))
+        tb_graph.new_input(input, (-1, -1, -1), 1, True)
+        tb_graph.new_input(weight, (0, -1, -1), 1, True)
+        tb_graph.new_input(output, (1, -1, -1), -1, True)
+        self.kn_graph.customized([input, weight, output], tb_graph)
+        self.kn_graph.register_task(
+            tb_graph,
+            "gang_fleet_toy_linear",
+            [rows, reduction_dim, output_per_xcd, output_dim, rows],
+        )
+
+    def fleet_toy_add_row_layer(
+        self,
+        input: DTensor,
+        residual: DTensor,
+        output: DTensor,
+        rows: int,
+        output_dim: int,
+        block_dim: tuple = (256, 1, 1),
+    ):
+        """Tutorial residual add: one ordinary Fleet task per row."""
+        tb_graph = TBGraph(CyTBGraph((rows, 1, 1), block_dim, 1, 64))
+        tb_graph.new_input(input, (0, -1, -1), -1, True)
+        tb_graph.new_input(residual, (0, -1, -1), -1, True)
+        tb_graph.new_input(output, (0, -1, -1), -1, True)
+        self.kn_graph.customized([input, residual, output], tb_graph)
+        self.kn_graph.register_task(
+            tb_graph, "fleet_toy_add_row", [output_dim]
+        )
+
     def gang_rmsnorm_layer(
         self,
         input: DTensor,

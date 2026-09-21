@@ -271,6 +271,7 @@ try:
             '-DFORMAL_VERIFIER_LIBRARIES=' + path.join(mirage_path, 'build', 'formal_verifier', 'release', 'libformal_verifier.so'),
             "-DCMAKE_C_COMPILER=" + os.environ["CC"],
             "-DCMAKE_CXX_COMPILER=" + os.environ["CXX"],
+            "-DROCM_PATH=" + rocm_home,
         ],
         cwd=build_dir,
         env=os.environ.copy(),
